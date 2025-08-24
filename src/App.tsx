@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { weatherService, type WeatherData } from "./weatherService";
 import {
   Leaf,
   ClipboardList,
@@ -457,15 +458,37 @@ export default function YardboyDashboard() {
     });
   }, [zones, areaFilter, query]);
 
-  // Fake daylight/temps placeholders
-  const daylightPct = 0.55;
-  const sunrise = "6:20 AM";
-  const sunset = "8:06 PM";
-  const tNow: number | null = 85;
-  const tMin: number | null = 63;
-  const tMax: number | null = 100;
-  const rainProb: number | null = 0;
-  const rainTotal: string | null = "0";
+  // Live weather data
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+
+  // Fetch weather data on component mount
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        setWeatherLoading(true);
+        setWeatherError(null);
+        const data = await weatherService.getCurrentWeather();
+        setWeatherData(data);
+      } catch (error) {
+        console.error('Failed to fetch weather:', error);
+        setWeatherError('Weather data unavailable');
+        setWeatherData(weatherService.getFallbackData());
+      } finally {
+        setWeatherLoading(false);
+      }
+    };
+
+    fetchWeather();
+    
+    // Refresh weather every 30 minutes
+    const interval = setInterval(fetchWeather, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Use weather data or fallback
+  const currentWeather = weatherData || weatherService.getFallbackData();
 
   return (
     <div className="min-h-screen bg-emerald-50 text-emerald-950">
@@ -473,10 +496,9 @@ export default function YardboyDashboard() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Leaf className="text-emerald-700" />
+            <img src="/src/YARDBOY.svg" alt="Yardboy" className="h-8 w-auto" />
             <div>
-              <h1 className="text-xl font-semibold">Yardboy v1</h1>
-              <div className="text-sm text-emerald-700">Plant dashboard</div>
+              <h1 className="text-xl font-semibold">v1</h1>
             </div>
           </div>
           <div className="hidden md:flex gap-6 text-sm text-emerald-800">
@@ -485,81 +507,93 @@ export default function YardboyDashboard() {
           </div>
         </div>
 
-        {/* Seasonal Quest Log */}
-        <SectionCard>
-          <div className="flex items-center gap-2 mb-2">
-            <ClipboardList className="text-emerald-700" />
-            <h2 className="text-lg font-semibold text-emerald-900">Seasonal Quest Log</h2>
-          </div>
-          <div className="text-sm text-emerald-700 mb-3">Late Summer → Early Fall (Aug–Sept)</div>
-          <div className="mb-3">
-            <div className="flex items-center justify-between text-sm text-emerald-800 mb-1">
-              <span>Progress</span>
-              <span><strong>{done}</strong>/{total} ({pct}%)</span>
+        {/* Quest Log and Today Info - Two Columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Seasonal Quest Log */}
+          <SectionCard>
+            <div className="flex items-center gap-2 mb-2">
+              <ClipboardList className="text-emerald-700" />
+              <h2 className="text-lg font-semibold text-emerald-900">Seasonal Quest Log</h2>
             </div>
-            <ProgressBar value={pct} />
-          </div>
-          <ul className="pl-1 text-sm space-y-1">
-            {visibleTasks.map((task, i) => {
-              const checked = checks[i] || false;
-              return (
-                <li key={`task-${i}`} className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 accent-emerald-600"
-                    checked={checked}
-                    onChange={() => toggleQuest(i)}
-                  />
-                  <span className={checked ? "line-through opacity-60" : ""}>{task.text}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </SectionCard>
+            <div className="text-sm text-emerald-700 mb-3">Late Summer → Early Fall (Aug–Sept)</div>
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-sm text-emerald-800 mb-1">
+                <span>Progress</span>
+                <span><strong>{done}</strong>/{total} ({pct}%)</span>
+              </div>
+              <ProgressBar value={pct} />
+            </div>
+            <ul className="pl-1 text-sm space-y-1">
+              {visibleTasks.map((task, i) => {
+                const checked = checks[i] || false;
+                return (
+                  <li key={`task-${i}`} className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-emerald-600"
+                      checked={checked}
+                      onChange={() => toggleQuest(i)}
+                    />
+                    <span className={checked ? "line-through opacity-60" : ""}>{task.text}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </SectionCard>
 
-        {/* Today */}
-        <SectionCard>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-            <div className="flex items-center gap-2">
-              <Clock className="text-emerald-700" />
-              <h2 className="text-lg font-semibold text-emerald-900">Today</h2>
+          {/* Today */}
+          <SectionCard>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Clock className="text-emerald-700" />
+                <h2 className="text-lg font-semibold text-emerald-900">Today</h2>
+                {weatherLoading && (
+                  <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">Loading...</span>
+                )}
+                {weatherError && (
+                  <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">Offline</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-900">This Month: <strong>{done}</strong>/{total} ({pct}%)</span>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-white text-emerald-800">Zones: <strong>{zones.length}</strong></span>
-              <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-white text-emerald-800">Front: <strong>{zones.filter(z => z.area === "Front Yard").length}</strong></span>
-              <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-white text-emerald-800">Back: <strong>{zones.filter(z => z.area === "Back Yard").length}</strong></span>
-              <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-white text-emerald-800">USDA <strong>{CLIMATE.usda}</strong></span>
-              <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-white text-emerald-800">Sunset <strong>{CLIMATE.sunset}</strong></span>
-              <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-900">This Month: <strong>{done}</strong>/{total} ({pct}%)</span>
-            </div>
-          </div>
-          <div className="mb-4">
-            <div className="flex items-center justify-between text-sm text-emerald-800 mb-1">
-              <span>Sunrise: <strong>{sunrise}</strong></span>
-              <span>Sunset: <strong>{sunset}</strong></span>
+            <div className="mb-4">
+                          <div className="flex items-center justify-between text-sm text-emerald-800 mb-1">
+              <span>Sunrise: <strong>{currentWeather.sunrise}</strong></span>
+              <span>Sunset: <strong>{currentWeather.sunset}</strong></span>
             </div>
             <div className="h-2.5 w-full bg-emerald-100 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-400" style={{ width: `${Math.round(daylightPct * 100)}%` }} />
+              <div className="h-full bg-emerald-400" style={{ width: `${Math.round(currentWeather.daylightPercent)}%` }} />
             </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center gap-3">
-              <ThermometerSun className="text-emerald-700" />
-              <div className="text-sm text-emerald-800">
-                <div className="text-emerald-900 font-semibold">{tNow != null ? Math.round(tNow) + "°F" : "—"}</div>
-                <div className="text-emerald-700">min {tMin != null ? Math.round(tMin) + "°F" : "—"} / max {tMax != null ? Math.round(tMax) + "°F" : "—"}</div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-center gap-3">
+                <ThermometerSun className="text-emerald-700" />
+                <div className="text-sm text-emerald-800">
+                  <div className="text-emerald-900 font-semibold">
+                    {weatherLoading ? "Loading..." : `${currentWeather.temperature.current}°F`}
+                  </div>
+                  <div className="text-emerald-700">
+                    min {currentWeather.temperature.min}°F / max {currentWeather.temperature.max}°F
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <CloudRain className="text-emerald-700" />
-              <div className="text-sm text-emerald-800">
-                <div className="text-emerald-900 font-semibold">Rain {rainProb != null ? Math.round(rainProb) + "%" : "—"}</div>
-                <div className="text-emerald-700">Total {rainTotal != null ? rainTotal + " in" : "—"}</div>
+              <div className="flex items-center gap-3">
+                <CloudRain className="text-emerald-700" />
+                <div className="text-sm text-emerald-800">
+                  <div className="text-emerald-900 font-semibold">
+                    Rain {weatherLoading ? "—" : `${currentWeather.rain.probability}%`}
+                  </div>
+                  <div className="text-emerald-700">
+                    Total {weatherLoading ? "—" : `${currentWeather.rain.total} in`}
+                  </div>
+                </div>
               </div>
+              <div />
             </div>
-            <div />
-          </div>
-        </SectionCard>
+          </SectionCard>
+        </div>
 
         {/* Zones */}
         <SectionCard>
