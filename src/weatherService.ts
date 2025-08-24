@@ -1,4 +1,4 @@
-// Weather service using OpenWeatherMap One Call API 3.0
+// Weather service using OpenWeatherMap API
 // Get free API key at: https://openweathermap.org/api
 
 const OPENWEATHER_API_KEY = (import.meta as any).env?.VITE_OPENWEATHER_API_KEY || '';
@@ -48,31 +48,33 @@ class WeatherService {
 
   async getCurrentWeather(city: string = DEFAULT_CITY): Promise<WeatherData> {
     try {
-      // First get coordinates for the city
-      const geoData = await this.makeRequest(`weather?q=${encodeURIComponent(city)}`);
-      const { lat, lon } = geoData.coord;
+      // Get current weather data
+      const currentData = await this.makeRequest(`weather?q=${encodeURIComponent(city)}`);
       
-      // Use One Call API 3.0 for comprehensive weather data
-      const oneCallData = await this.makeRequest(`onecall?lat=${lat}&lon=${lon}`);
+      // Get 5-day forecast for rain probability
+      const forecastData = await this.makeRequest(`forecast?q=${encodeURIComponent(city)}`);
       
       // Calculate daylight percentage
       const now = new Date();
-      const sunrise = new Date(oneCallData.current.sunrise * 1000);
-      const sunset = new Date(oneCallData.current.sunset * 1000);
+      const sunrise = new Date(currentData.sys.sunrise * 1000);
+      const sunset = new Date(currentData.sys.sunset * 1000);
       const daylightPercent = this.calculateDaylightPercent(now, sunrise, sunset);
       
-      // Get today's forecast data
-      const today = new Date();
-      const todayForecast = oneCallData.daily?.[0];
+      // Find today's rain probability from forecast
+      const todayForecast = forecastData.list.find((item: any) => {
+        const forecastDate = new Date(item.dt * 1000);
+        const today = new Date();
+        return forecastDate.toDateString() === today.toDateString();
+      });
       
       const rainProbability = todayForecast?.pop ? Math.round(todayForecast.pop * 100) : 0;
-      const rainTotal = todayForecast?.rain ? `${(todayForecast.rain / 25.4).toFixed(2)}` : '0';
+      const rainTotal = todayForecast?.rain?.['3h'] ? `${(todayForecast.rain['3h'] / 25.4).toFixed(2)}` : '0';
       
       return {
         temperature: {
-          current: Math.round(oneCallData.current.temp),
-          min: Math.round(todayForecast?.temp?.min || oneCallData.current.temp),
-          max: Math.round(todayForecast?.temp?.max || oneCallData.current.temp),
+          current: Math.round(currentData.main.temp),
+          min: Math.round(currentData.main.temp_min),
+          max: Math.round(currentData.main.temp_max),
         },
         rain: {
           probability: rainProbability,
@@ -89,8 +91,8 @@ class WeatherService {
           hour12: true 
         }),
         daylightPercent,
-        description: oneCallData.current.weather[0]?.description || 'Unknown',
-        icon: oneCallData.current.weather[0]?.icon || '01d',
+        description: currentData.weather[0]?.description || 'Unknown',
+        icon: currentData.weather[0]?.icon || '01d',
       };
     } catch (error) {
       console.error('Failed to fetch weather data:', error);

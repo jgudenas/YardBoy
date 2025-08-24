@@ -496,7 +496,7 @@ export default function YardboyDashboard() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/src/YARDBOY.svg" alt="Yardboy" className="h-8 w-auto" />
+            <img src="/YARDBOY.svg" alt="Yardboy" className="h-8 w-auto" />
             <div>
               <h1 className="text-xl font-semibold">v1</h1>
             </div>
